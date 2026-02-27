@@ -25,7 +25,6 @@ export interface Process {
   Partes_Envolvidas: string[];
   Movimentacoes: Movement[];
   stage: ProcessStage;
-  successProbability: number;
 }
 
 export interface Note {

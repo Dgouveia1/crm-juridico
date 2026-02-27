@@ -129,9 +129,6 @@ const KanbanView = () => {
                                                         style={{ color: c.border }}>
                                                         {proc.Numero_Processo}
                                                     </span>
-                                                    <span className="kanban-card-prob" style={{ color: c.text, background: c.bg }}>
-                                                        {proc.successProbability}%
-                                                    </span>
                                                 </div>
 
                                                 <div className="kanban-card-classe-full">{proc.Classe}</div>

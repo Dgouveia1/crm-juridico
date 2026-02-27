@@ -103,9 +103,6 @@ const ProcessDetail = () => {
             <span className="pdetail-stage-pill" style={{ background: stageColor + '22', color: stageColor }}>
               {process.stage}
             </span>
-            <span className="pdetail-prob">
-              ✦ Êxito: {process.successProbability}%
-            </span>
           </div>
         </div>
       </div>
@@ -211,13 +208,6 @@ const ProcessDetail = () => {
                 <div className="pdetail-dado">
                   <span className="pdetail-dado-label">Etapa Atual</span>
                   <span className="pdetail-dado-val" style={{ color: stageColor, fontWeight: 700 }}>{process.stage}</span>
-                </div>
-                <div className="pdetail-dado">
-                  <span className="pdetail-dado-label">Prob. de Êxito</span>
-                  <div className="pdetail-prob-bar">
-                    <div className="pdetail-prob-bar-inner" style={{ width: `${process.successProbability}%`, background: stageColor }} />
-                    <span className="pdetail-prob-val">{process.successProbability}%</span>
-                  </div>
                 </div>
                 <div className="pdetail-dado">
                   <span className="pdetail-dado-label">Total Movimentações</span>

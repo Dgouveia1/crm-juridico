@@ -59,18 +59,6 @@ const Dashboard = () => {
       .sort((a, b) => b.value - a.value)
       .slice(0, 6);
 
-    // Success probability distribution
-    const probBuckets = [
-      { label: '< 30%', min: 0, max: 30, count: 0, color: '#ef4444' },
-      { label: '30–50%', min: 30, max: 50, count: 0, color: '#f59e0b' },
-      { label: '50–70%', min: 50, max: 70, count: 0, color: '#3b82f6' },
-      { label: '70–85%', min: 70, max: 85, count: 0, color: '#10b981' },
-      { label: '> 85%', min: 85, max: 100, count: 0, color: '#059669' },
-    ];
-    processes.forEach(p => {
-      const bucket = probBuckets.find(b => p.successProbability >= b.min && p.successProbability < b.max);
-      if (bucket) bucket.count++;
-    });
 
     // Recent critical movements (last 8)
     const allMovements = processes.flatMap(p =>
@@ -92,7 +80,6 @@ const Dashboard = () => {
       honorariosEst,
       stageFunnel,
       foroRanking,
-      probBuckets,
       recentMovements: allMovements,
       weekAlerts,
     };
@@ -223,40 +210,7 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Probabilidade de Êxito */}
-        <div className="dash-chart-card">
-          <h3 className="dash-chart-title">
-            <TrendingUp size={16} />
-            Probabilidade de Êxito
-          </h3>
-          <div className="dash-chart-area">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={metrics.probBuckets.filter(b => b.count > 0)} margin={{ left: 0, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,.15)" />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 11, fill: '#94a3b8' }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: '#94a3b8' }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  formatter={(v: number) => [v + ' processos', 'Quantidade']}
-                  contentStyle={{ borderRadius: '12px', border: 'none', background: '#1e293b', color: '#f1f5f9', fontSize: 12 }}
-                />
-                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                  {metrics.probBuckets.filter(b => b.count > 0).map((b, i) => (
-                    <Cell key={i} fill={b.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+
       </div>
 
       {/* ── Recent Movements ───────────────────────────────── */}

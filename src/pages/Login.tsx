@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, Scale, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
+import LoadingScreen from '../components/LoadingScreen';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPostLogin, setShowPostLogin] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -16,13 +18,20 @@ const Login = () => {
     await new Promise(r => setTimeout(r, 800));
     if (username === 'lmamprin' && password === 'lalala123') {
       localStorage.setItem('isAuthenticated', 'true');
-      navigate('/');
-      toast.success('Acesso autorizado!');
+      setShowPostLogin(true);
+      setTimeout(() => {
+        navigate('/');
+        toast.success('Acesso autorizado!');
+      }, 1500); // Exibe a tela de carregamento rápido
     } else {
       toast.error('Credenciais inválidas.');
+      setLoading(false);
     }
-    setLoading(false);
   };
+
+  if (showPostLogin) {
+    return <LoadingScreen />;
+  }
 
   return (
     <div className="login-page">

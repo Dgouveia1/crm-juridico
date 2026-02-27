@@ -73,31 +73,7 @@ export const inferAlertType = (description: string): AlertType => {
   return 'geral';
 };
 
-/**
- * Estimates a synthetic success probability based on process class and stage.
- */
-export const estimateSuccessProbability = (classe: string, stage: ProcessStage): number => {
-  const classeLower = classe.toLowerCase();
 
-  // Base by stage
-  const stageBase: Record<ProcessStage, number> = {
-    'Petição Inicial': 50,
-    'Instrução': 55,
-    'Sentença': 60,
-    'Recurso': 45,
-    'Execução': 75,
-    'Arquivado': 30,
-  };
-
-  let base = stageBase[stage] ?? 50;
-
-  // Adjust by class
-  if (classeLower.includes('execução')) base += 10;
-  if (classeLower.includes('cumprimento')) base += 15;
-  if (classeLower.includes('juizado')) base += 5;
-
-  return Math.min(95, Math.max(10, base));
-};
 
 export const loadProcessesData = async (): Promise<Process[]> => {
   try {
@@ -124,7 +100,6 @@ export const loadProcessesData = async (): Promise<Process[]> => {
               Partes_Envolvidas: parseParties(row.Partes_Envolvidas),
               Movimentacoes: movs,
               stage,
-              successProbability: estimateSuccessProbability(classe, stage),
             };
           });
           resolve(processes);
