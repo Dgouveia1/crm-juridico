@@ -1,89 +1,142 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FileText, Users, Bell, LogOut } from 'lucide-react';
+import {
+  LayoutDashboard, FileText, Users, Bell, LogOut,
+  Columns, ChevronRight, Sparkles, Scale, Search, X, Menu
+} from 'lucide-react';
 import { useAppContext } from '../store/AppContext';
 
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { alerts } = useAppContext();
+  const { alerts, processes } = useAppContext();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated');
     navigate('/login');
   };
 
+  const urgentAlerts = alerts.filter(a => !a.dismissed && a.daysUntil <= 7).length;
+
   const navItems = [
-    { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/processos', icon: FileText, label: 'Processos' },
-    { path: '/crm', icon: Users, label: 'CRM (Partes)' },
-    { path: '/alertas', icon: Bell, label: 'Alertas', badge: alerts.length },
+    { path: '/', icon: LayoutDashboard, label: 'Dashboard', desc: 'Centro de Comando' },
+    { path: '/processos', icon: FileText, label: 'Processos', desc: 'Gestão Processual' },
+    { path: '/kanban', icon: Columns, label: 'Funil / Kanban', desc: 'Visão por Etapa' },
+    { path: '/crm', icon: Users, label: 'CRM (Partes)', desc: 'Clientes & Partes' },
+    { path: '/alertas', icon: Bell, label: 'Alertas', desc: 'Prazos & Intimações', badge: urgentAlerts },
   ];
 
+  const isActive = (path: string) =>
+    path === '/'
+      ? location.pathname === '/'
+      : location.pathname.startsWith(path);
+
+  const currentPage = navItems.find(i => isActive(i.path));
+
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col">
-        <div className="p-6">
-          <h1 className="text-2xl font-bold text-white tracking-tight">Mamprin Adv</h1>
-          <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider">Gestão Processual</p>
+    <div className="app-shell">
+      {/* ── Sidebar ─────────────────────────────────────────────── */}
+      <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+        {/* Brand header */}
+        <div className="sidebar-brand" style={{ padding: '20px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <img src="/logos/logo.png" alt="World Games" style={{ width: '130px', height: 'auto', objectFit: 'contain' }} />
+
+          {/* Copiloto badge */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginLeft: 'auto', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', color: '#f59e0b', fontSize: '11px', fontWeight: 900, letterSpacing: '0.5px' }}>
+              <span>COPILOTO IA</span>
+            </div>
+            <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 600, fontFamily: 'monospace', letterSpacing: '1px' }}>V2.0</span>
+          </div>
         </div>
-        
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
-            
+
+        {/* Navigation */}
+        <nav className="sidebar-nav">
+          <p className="sidebar-nav-label">MENU PRINCIPAL</p>
+          {navItems.map(({ path, icon: Icon, label, desc, badge }) => {
+            const active = isActive(path);
             return (
               <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 ${
-                  isActive 
-                    ? 'bg-emerald-500/10 text-emerald-400' 
-                    : 'hover:bg-slate-800 hover:text-white'
-                }`}
+                key={path}
+                to={path}
+                className={`sidebar-nav-item ${active ? 'sidebar-nav-item--active' : ''}`}
               >
-                <div className="flex items-center gap-3">
-                  <Icon size={20} />
-                  <span className="font-medium">{item.label}</span>
+                <div className="sidebar-nav-item-left">
+                  <div className={`sidebar-nav-icon ${active ? 'sidebar-nav-icon--active' : ''}`}>
+                    <Icon size={18} />
+                  </div>
+                  <div className="sidebar-nav-label-wrap">
+                    <span className="sidebar-nav-label-main">{label}</span>
+                    {sidebarOpen && <span className="sidebar-nav-label-desc">{desc}</span>}
+                  </div>
                 </div>
-                {item.badge !== undefined && item.badge > 0 && (
-                  <span className="bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                    {item.badge}
-                  </span>
-                )}
+                <div className="sidebar-nav-item-right">
+                  {badge !== undefined && badge > 0 && (
+                    <span className="sidebar-badge">{badge}</span>
+                  )}
+                  {active && <ChevronRight size={14} className="sidebar-chevron" />}
+                </div>
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4">
-          <button 
-            onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 w-full text-left rounded-xl hover:bg-slate-800 transition-colors text-slate-400 hover:text-white"
-          >
-            <LogOut size={20} />
-            <span className="font-medium">Sair</span>
+        {/* Stats strip */}
+        <div className="sidebar-stats">
+          <div className="sidebar-stat">
+            <span className="sidebar-stat-val">{processes.length}</span>
+            <span className="sidebar-stat-label">Processos</span>
+          </div>
+          <div className="sidebar-stat-divider" />
+          <div className="sidebar-stat">
+            <span className="sidebar-stat-val sidebar-stat-val--alert">{urgentAlerts}</span>
+            <span className="sidebar-stat-label">Alertas</span>
+          </div>
+        </div>
+
+        {/* User + logout */}
+        <div className="sidebar-footer">
+          <div className="sidebar-user">
+            <div className="sidebar-avatar">LM</div>
+            <div className="sidebar-user-info">
+              <span className="sidebar-user-name">Luiz Mamprin</span>
+              <span className="sidebar-user-role">Advogado Principal</span>
+            </div>
+          </div>
+          <button onClick={handleLogout} className="sidebar-logout" title="Sair">
+            <LogOut size={16} />
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
-          <h2 className="text-xl font-semibold text-slate-800">
-            {navItems.find(item => location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path)))?.label || 'Detalhes'}
-          </h2>
-          <div className="flex items-center gap-4">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">
-              LM
+      {/* ── Main area ───────────────────────────────────────────── */}
+      <main className="main-area">
+        {/* Topbar */}
+        <header className="topbar">
+          <div className="topbar-left">
+            <div className="topbar-breadcrumb">
+              <span className="topbar-breadcrumb-home">Copiloto</span>
+              <ChevronRight size={14} />
+              <span className="topbar-breadcrumb-current">{currentPage?.label || 'Detalhes'}</span>
             </div>
-            <span className="text-sm font-medium text-slate-600">Luiz Mamprin</span>
+          </div>
+          <div className="topbar-right">
+            <div className="topbar-search">
+              <Search size={15} className="topbar-search-icon" />
+              <input placeholder="Busca rápida..." className="topbar-search-input" readOnly
+                onClick={() => navigate('/processos')} />
+            </div>
+            <Link to="/alertas" className="topbar-bell">
+              <Bell size={18} />
+              {urgentAlerts > 0 && <span className="topbar-bell-badge">{urgentAlerts}</span>}
+            </Link>
+            <div className="topbar-avatar">LM</div>
           </div>
         </header>
-        
-        <div className="flex-1 overflow-auto p-8">
+
+        {/* Page content */}
+        <div className="page-content">
           <Outlet />
         </div>
       </main>

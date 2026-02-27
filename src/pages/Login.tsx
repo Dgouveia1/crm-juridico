@@ -1,88 +1,130 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scale } from 'lucide-react';
+import { Sparkles, Scale, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 800));
     if (username === 'lmamprin' && password === 'lalala123') {
       localStorage.setItem('isAuthenticated', 'true');
       navigate('/');
-      toast.success('Login realizado com sucesso!');
+      toast.success('Acesso autorizado!');
     } else {
-      toast.error('Usuário ou senha inválidos.');
+      toast.error('Credenciais inválidas.');
     }
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-            <Scale className="text-white" size={32} />
+    <div className="login-page">
+      {/* Left panel */}
+      <div className="login-left">
+        <div className="login-left-inner" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+            <img src="/logos/logo.png" alt="World Games" style={{ width: '320px', height: 'auto', objectFit: 'contain' }} />
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontSize: '22px', fontWeight: 900, letterSpacing: '2px' }}>
+                <Sparkles size={20} />
+                <span>COPILOTO IA</span>
+                <Sparkles size={20} />
+              </div>
+              <span style={{ fontSize: '16px', color: '#cbd5e1', fontWeight: 600, fontFamily: 'monospace', letterSpacing: '3px' }}>V2.0</span>
+            </div>
+          </div>
+
+          <p className="login-left-sub" style={{ marginTop: '16px', fontSize: '18px' }}>
+            Gestão processual inteligente com<br />o poder da Inteligência Artificial.
+          </p>
+          <div className="login-left-badges">
+            <span className="login-badge">⚖️ e-SAJ Integrado</span>
+            <span className="login-badge">🔔 Alertas Automáticos</span>
+            <span className="login-badge">📊 Analytics</span>
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900 tracking-tight">
-          Mamprin Advogados
-        </h2>
-        <p className="mt-2 text-center text-sm text-slate-600">
-          Sistema de Gestão Processual
-        </p>
+        {/* Decorative golden cloud */}
+        <div className="login-orb" style={{ width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(212,160,23,0.3) 0%, rgba(212,160,23,0) 70%)', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', opacity: 0.8, filter: 'blur(60px)' }} />
+        <div className="login-orb login-orb-2" />
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow-xl shadow-slate-200/50 sm:rounded-2xl sm:px-10 border border-slate-100">
-          <form className="space-y-6" onSubmit={handleLogin}>
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-slate-700">
-                Usuário
-              </label>
-              <div className="mt-1">
-                <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-slate-300 rounded-xl shadow-sm placeholder-slate-400 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm transition-colors"
-                  placeholder="Seu usuário"
-                />
-              </div>
+      {/* Right panel — form */}
+      <div className="login-right">
+        <div className="login-card">
+          {/* Header */}
+          <div className="login-card-header">
+            <div className="login-card-copiloto">
+              <Sparkles size={14} />
+              <span>POWERED BY COPILOTO IA 2.0</span>
+              <Sparkles size={14} />
+            </div>
+            <h2 className="login-card-title">Login</h2>
+            <p className="login-card-sub">Acesso exclusivo para advogados cadastrados.</p>
+          </div>
+
+          {/* Form */}
+          <form className="login-form" onSubmit={handleLogin}>
+            <div className="login-field">
+              <label htmlFor="username" className="login-label">Usuário</label>
+              <input
+                id="username"
+                type="text"
+                required
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                className="login-input"
+                placeholder="Seu usuário"
+                autoComplete="username"
+              />
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                Senha
-              </label>
-              <div className="mt-1">
+            <div className="login-field">
+              <label htmlFor="password" className="login-label">Senha</label>
+              <div className="login-input-wrap">
                 <input
                   id="password"
-                  name="password"
-                  type="password"
+                  type={showPass ? 'text' : 'password'}
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-slate-300 rounded-xl shadow-sm placeholder-slate-400 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm transition-colors"
+                  onChange={e => setPassword(e.target.value)}
+                  className="login-input login-input--pass"
                   placeholder="Sua senha"
+                  autoComplete="current-password"
                 />
+                <button
+                  type="button"
+                  className="login-eye"
+                  onClick={() => setShowPass(s => !s)}
+                >
+                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
-            <div>
-              <button
-                type="submit"
-                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-all active:scale-[0.98]"
-              >
-                Entrar no Sistema
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className={`login-btn ${loading ? 'login-btn--loading' : ''}`}
+            >
+              {loading ? (
+                <span className="login-spinner" />
+              ) : (
+                'Acessar Sistema'
+              )}
+            </button>
           </form>
+
+          <p className="login-footer-text">
+            Sistema protegido • Dr Luiz Mamprin © 2026
+          </p>
         </div>
       </div>
     </div>

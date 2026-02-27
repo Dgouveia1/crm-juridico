@@ -1,178 +1,359 @@
 import React, { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../store/AppContext';
-import { ArrowLeft, Building2, Gavel, FileText, DollarSign, Calendar, MessageSquare, Plus, Save } from 'lucide-react';
+import {
+  ArrowLeft, FileText, Calendar, MessageSquare, CheckSquare,
+  Building2, Gavel, DollarSign, User, Phone, Mail,
+  Save, Plus, Trash2, Check, Clock, AlertTriangle,
+  Scale, ScrollText, Hammer, Bell
+} from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ProcessStage } from '../types';
+
+type Tab = 'dados' | 'movimentacoes' | 'anotacoes' | 'tarefas';
+
+const STAGE_COLORS: Record<ProcessStage, string> = {
+  'Petição Inicial': '#3b82f6',
+  'Instrução': '#8b5cf6',
+  'Sentença': '#f59e0b',
+  'Recurso': '#ef4444',
+  'Execução': '#10b981',
+  'Arquivado': '#6b7280',
+};
+
+// Get icon based on movement description
+const getMovIcon = (desc: string) => {
+  const lower = desc.toLowerCase();
+  if (lower.includes('sentença') || lower.includes('julgad') || lower.includes('decisão') || lower.includes('despacho')) return Hammer;
+  if (lower.includes('intimação') || lower.includes('intime-se') || lower.includes('portal') || lower.includes('ato ordinatório')) return Bell;
+  if (lower.includes('petição') || lower.includes('juntada') || lower.includes('documento')) return ScrollText;
+  if (lower.includes('audiência') || lower.includes('conciliação')) return Scale;
+  return Calendar;
+};
+
+const getMovColor = (desc: string): string => {
+  const lower = desc.toLowerCase();
+  if (lower.includes('sentença') || lower.includes('julgad')) return '#f59e0b';
+  if (lower.includes('intimação') || lower.includes('intime-se')) return '#8b5cf6';
+  if (lower.includes('petição') || lower.includes('juntada')) return '#3b82f6';
+  if (lower.includes('audiência')) return '#10b981';
+  if (lower.includes('prazo') || lower.includes('urgente')) return '#ef4444';
+  return '#6b7280';
+};
 
 const ProcessDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { processes, notes, addNote } = useAppContext();
-  
+  const { processes, notes, addNote, tasks, addTask, toggleTask, deleteTask } = useAppContext();
+
+  const [activeTab, setActiveTab] = useState<Tab>('dados');
   const [newNote, setNewNote] = useState('');
-  
-  const process = processes.find(p => p.Numero_Processo === id);
-  const processNotes = notes.filter(n => n.processId === id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const [newTask, setNewTask] = useState({ title: '', dueDate: '', priority: 'media' as 'alta' | 'media' | 'baixa' });
+
+  const decodedId = decodeURIComponent(id || '');
+  const process = processes.find(p => p.Numero_Processo === decodedId);
+  const processNotes = notes.filter(n => n.processId === decodedId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const processTasks = tasks.filter(t => t.processId === decodedId).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
   if (!process) {
     return (
-      <div className="text-center py-12">
-        <h2 className="text-2xl font-bold text-slate-900">Processo não encontrado</h2>
-        <button onClick={() => navigate('/processos')} className="mt-4 text-emerald-600 hover:underline">
-          Voltar para a lista
-        </button>
+      <div className="pdetail-notfound">
+        <h2>Processo não encontrado</h2>
+        <button onClick={() => navigate('/processos')}>Voltar para a lista</button>
       </div>
     );
   }
 
   const handleAddNote = () => {
     if (!newNote.trim()) return;
-    addNote({
-      processId: process.Numero_Processo,
-      content: newNote,
-      date: new Date().toISOString()
-    });
+    addNote({ processId: decodedId, content: newNote, date: new Date().toISOString() });
     setNewNote('');
-    toast.success('Anotação adicionada com sucesso!');
+    toast.success('Anotação salva!');
   };
 
+  const handleAddTask = () => {
+    if (!newTask.title.trim()) return;
+    addTask({ processId: decodedId, title: newTask.title, dueDate: newTask.dueDate, completed: false, priority: newTask.priority });
+    setNewTask({ title: '', dueDate: '', priority: 'media' });
+    toast.success('Tarefa adicionada!');
+  };
+
+  const clientName = process.Partes_Envolvidas[0] || 'N/A';
+  const stageColor = STAGE_COLORS[process.stage] || '#6b7280';
+  const pendingTasks = processTasks.filter(t => !t.completed).length;
+
+  const tabs: { id: Tab; label: string; icon: React.ComponentType<any>; badge?: number }[] = [
+    { id: 'dados', label: 'Dados Básicos', icon: FileText },
+    { id: 'movimentacoes', label: 'Movimentações', icon: Calendar },
+    { id: 'anotacoes', label: 'Anotações', icon: MessageSquare, badge: processNotes.length },
+    { id: 'tarefas', label: 'Tarefas', icon: CheckSquare, badge: pendingTasks },
+  ];
+
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
-      <div className="flex items-center gap-4">
-        <button 
-          onClick={() => navigate('/processos')}
-          className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-600"
-        >
-          <ArrowLeft size={20} />
+    <div className="pdetail">
+      {/* Back + Header */}
+      <div className="pdetail-header">
+        <button onClick={() => navigate('/processos')} className="pdetail-back">
+          <ArrowLeft size={18} />
         </button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{process.Numero_Processo}</h1>
-          <p className="text-sm text-slate-500 mt-1">{process.Classe}</p>
+        <div className="pdetail-title-block">
+          <div className="pdetail-num">{process.Numero_Processo}</div>
+          <div className="pdetail-meta">
+            <span className="pdetail-classe">{process.Classe}</span>
+            <span className="pdetail-stage-pill" style={{ background: stageColor + '22', color: stageColor }}>
+              {process.stage}
+            </span>
+            <span className="pdetail-prob">
+              ✦ Êxito: {process.successProbability}%
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Info */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <FileText size={20} className="text-emerald-600" />
-              Dados Cadastrais
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
+      <div className="pdetail-body">
+        {/* ── Client Widget Sidebar ────────────────────── */}
+        <aside className="pdetail-sidebar">
+          <div className="pdetail-client-card">
+            <div className="pdetail-client-avatar">
+              {clientName.charAt(0).toUpperCase()}
+            </div>
+            <div className="pdetail-client-name">{clientName}</div>
+            <div className="pdetail-client-label">Cliente Principal</div>
+            <div className="pdetail-client-actions">
+              <a href={`tel:+55`} className="pdetail-client-btn" title="Ligar">
+                <Phone size={15} />
+              </a>
+              <a href={`mailto:`} className="pdetail-client-btn" title="E-mail">
+                <Mail size={15} />
+              </a>
+            </div>
+          </div>
+
+          {/* Process info mini */}
+          <div className="pdetail-info-card">
+            <div className="pdetail-info-row">
+              <Building2 size={14} className="pdetail-info-icon" />
               <div>
-                <span className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Assunto</span>
-                <span className="text-slate-900 font-medium">{process.Assunto}</span>
+                <div className="pdetail-info-label">Foro</div>
+                <div className="pdetail-info-val">{process.Foro}</div>
               </div>
+            </div>
+            <div className="pdetail-info-row">
+              <Gavel size={14} className="pdetail-info-icon" />
               <div>
-                <span className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Valor da Ação</span>
-                <span className="text-slate-900 font-medium flex items-center gap-1">
-                  <DollarSign size={14} className="text-emerald-600" />
+                <div className="pdetail-info-label">Juiz(a)</div>
+                <div className="pdetail-info-val">{process.Juiz}</div>
+              </div>
+            </div>
+            <div className="pdetail-info-row">
+              <DollarSign size={14} className="pdetail-info-icon" />
+              <div>
+                <div className="pdetail-info-label">Valor da Ação</div>
+                <div className="pdetail-info-val pdetail-info-val--green">
                   {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(process.Valor_Acao)}
-                </span>
-              </div>
-              <div>
-                <span className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Foro</span>
-                <span className="text-slate-900 font-medium flex items-center gap-1">
-                  <Building2 size={14} className="text-slate-400" />
-                  {process.Foro}
-                </span>
-              </div>
-              <div>
-                <span className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Vara</span>
-                <span className="text-slate-900 font-medium">{process.Vara}</span>
-              </div>
-              <div className="sm:col-span-2">
-                <span className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Juiz(a)</span>
-                <span className="text-slate-900 font-medium flex items-center gap-1">
-                  <Gavel size={14} className="text-slate-400" />
-                  {process.Juiz}
-                </span>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <Calendar size={20} className="text-emerald-600" />
-              Histórico de Movimentações
-            </h3>
-            <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
-              {process.Movimentacoes.map((mov, idx) => (
-                <div key={idx} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white bg-emerald-100 text-emerald-600 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
-                    <Calendar size={16} />
+          {/* All parties */}
+          <div className="pdetail-parties-card">
+            <h4 className="pdetail-parties-title">
+              <User size={14} /> Partes Envolvidas
+            </h4>
+            {process.Partes_Envolvidas.map((p, i) => (
+              <div key={i} className="pdetail-party-item">{p}</div>
+            ))}
+            {process.Partes_Envolvidas.length === 0 && (
+              <div className="pdetail-party-empty">Nenhuma parte cadastrada</div>
+            )}
+          </div>
+        </aside>
+
+        {/* ── Main Tabs ───────────────────────────────── */}
+        <div className="pdetail-main">
+          {/* Tab navigation */}
+          <div className="pdetail-tabs">
+            {tabs.map(tab => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`pdetail-tab ${activeTab === tab.id ? 'pdetail-tab--active' : ''}`}
+                >
+                  <Icon size={15} />
+                  {tab.label}
+                  {tab.badge !== undefined && tab.badge > 0 && (
+                    <span className="pdetail-tab-badge">{tab.badge}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ── TAB: Dados Básicos ──────────────────── */}
+          {activeTab === 'dados' && (
+            <div className="pdetail-tab-content pdetail-dados">
+              <div className="pdetail-dados-grid">
+                <div className="pdetail-dado">
+                  <span className="pdetail-dado-label">Classe</span>
+                  <span className="pdetail-dado-val">{process.Classe}</span>
+                </div>
+                <div className="pdetail-dado">
+                  <span className="pdetail-dado-label">Assunto</span>
+                  <span className="pdetail-dado-val">{process.Assunto}</span>
+                </div>
+                <div className="pdetail-dado">
+                  <span className="pdetail-dado-label">Vara</span>
+                  <span className="pdetail-dado-val">{process.Vara}</span>
+                </div>
+                <div className="pdetail-dado">
+                  <span className="pdetail-dado-label">Etapa Atual</span>
+                  <span className="pdetail-dado-val" style={{ color: stageColor, fontWeight: 700 }}>{process.stage}</span>
+                </div>
+                <div className="pdetail-dado">
+                  <span className="pdetail-dado-label">Prob. de Êxito</span>
+                  <div className="pdetail-prob-bar">
+                    <div className="pdetail-prob-bar-inner" style={{ width: `${process.successProbability}%`, background: stageColor }} />
+                    <span className="pdetail-prob-val">{process.successProbability}%</span>
                   </div>
-                  <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-emerald-600 text-sm">{mov.date}</span>
+                </div>
+                <div className="pdetail-dado">
+                  <span className="pdetail-dado-label">Total Movimentações</span>
+                  <span className="pdetail-dado-val">{process.Movimentacoes.length} registros</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB: Movimentações ──────────────────── */}
+          {activeTab === 'movimentacoes' && (
+            <div className="pdetail-tab-content pdetail-timeline">
+              <div className="timeline">
+                {process.Movimentacoes.map((mov, idx) => {
+                  const Icon = getMovIcon(mov.description);
+                  const color = getMovColor(mov.description);
+                  return (
+                    <div key={idx} className="timeline-item">
+                      <div className="timeline-line" />
+                      <div className="timeline-icon" style={{ background: color + '20', color }}>
+                        <Icon size={15} />
+                      </div>
+                      <div className="timeline-card">
+                        <div className="timeline-card-header">
+                          <span className="timeline-date">{mov.date}</span>
+                        </div>
+                        <p className="timeline-desc">{mov.description}</p>
+                      </div>
                     </div>
-                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {mov.description}
-                    </p>
+                  );
+                })}
+                {process.Movimentacoes.length === 0 && (
+                  <p className="pdetail-empty">Nenhuma movimentação registrada.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB: Anotações ──────────────────────── */}
+          {activeTab === 'anotacoes' && (
+            <div className="pdetail-tab-content pdetail-notes">
+              <div className="notes-list">
+                {processNotes.map(note => (
+                  <div key={note.id} className="note-card">
+                    <p className="note-content">{note.content}</p>
+                    <span className="note-date">
+                      {new Date(note.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
-                </div>
-              ))}
-              {process.Movimentacoes.length === 0 && (
-                <p className="text-slate-500 text-center py-4 relative z-10 bg-white">Nenhuma movimentação registrada.</p>
-              )}
+                ))}
+                {processNotes.length === 0 && (
+                  <div className="pdetail-empty">Nenhuma anotação. Adicione a primeira!</div>
+                )}
+              </div>
+              <div className="notes-add">
+                <textarea
+                  value={newNote}
+                  onChange={e => setNewNote(e.target.value)}
+                  placeholder="Nova anotação interna..."
+                  className="notes-textarea"
+                  rows={4}
+                />
+                <button onClick={handleAddNote} disabled={!newNote.trim()} className="notes-save-btn">
+                  <Save size={15} /> Salvar Anotação
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Sidebar Info */}
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Partes Envolvidas</h3>
-            <div className="space-y-2">
-              {process.Partes_Envolvidas.map((party, idx) => (
-                <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="font-medium text-slate-800">{party}</span>
+          {/* ── TAB: Tarefas ────────────────────────── */}
+          {activeTab === 'tarefas' && (
+            <div className="pdetail-tab-content pdetail-tasks">
+              {/* Add task form */}
+              <div className="tasks-add">
+                <input
+                  type="text"
+                  placeholder="Nova tarefa para este processo..."
+                  value={newTask.title}
+                  onChange={e => setNewTask(t => ({ ...t, title: e.target.value }))}
+                  className="tasks-input"
+                />
+                <div className="tasks-add-row">
+                  <input
+                    type="date"
+                    value={newTask.dueDate}
+                    onChange={e => setNewTask(t => ({ ...t, dueDate: e.target.value }))}
+                    className="tasks-date"
+                  />
+                  <select
+                    value={newTask.priority}
+                    onChange={e => setNewTask(t => ({ ...t, priority: e.target.value as any }))}
+                    className="tasks-priority-sel"
+                  >
+                    <option value="alta">🔴 Alta</option>
+                    <option value="media">🟡 Média</option>
+                    <option value="baixa">🟢 Baixa</option>
+                  </select>
+                  <button onClick={handleAddTask} disabled={!newTask.title.trim()} className="tasks-add-btn">
+                    <Plus size={15} /> Adicionar
+                  </button>
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[500px]">
-            <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2 shrink-0">
-              <MessageSquare size={20} className="text-emerald-600" />
-              Anotações Internas
-            </h3>
-            
-            <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 custom-scrollbar">
-              {processNotes.map(note => (
-                <div key={note.id} className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl">
-                  <p className="text-sm text-slate-800 whitespace-pre-wrap">{note.content}</p>
-                  <span className="text-xs text-slate-400 mt-2 block">
-                    {new Date(note.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              ))}
-              {processNotes.length === 0 && (
-                <div className="h-full flex items-center justify-center text-slate-400 text-sm text-center">
-                  Nenhuma anotação.<br/>Adicione uma abaixo.
-                </div>
-              )}
+              {/* Task list */}
+              <div className="tasks-list">
+                {processTasks.map(task => {
+                  const isOverdue = !task.completed && task.dueDate && new Date(task.dueDate) < new Date();
+                  return (
+                    <div key={task.id} className={`task-item ${task.completed ? 'task-item--done' : ''} ${isOverdue ? 'task-item--overdue' : ''}`}>
+                      <button onClick={() => toggleTask(task.id)} className="task-check">
+                        {task.completed ? <Check size={14} /> : <div className="task-check-empty" />}
+                      </button>
+                      <div className="task-body">
+                        <span className="task-title">{task.title}</span>
+                        {task.dueDate && (
+                          <span className={`task-due ${isOverdue ? 'task-due--overdue' : ''}`}>
+                            {isOverdue ? <AlertTriangle size={12} /> : <Clock size={12} />}
+                            {new Date(task.dueDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
+                      </div>
+                      <span className={`task-priority task-priority--${task.priority || 'media'}`}>
+                        {task.priority === 'alta' ? '🔴' : task.priority === 'baixa' ? '🟢' : '🟡'}
+                      </span>
+                      <button onClick={() => deleteTask(task.id)} className="task-delete">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+                {processTasks.length === 0 && (
+                  <div className="pdetail-empty">Nenhuma tarefa criada. Adicione acima!</div>
+                )}
+              </div>
             </div>
-
-            <div className="shrink-0 mt-auto pt-4 border-t border-slate-100">
-              <textarea
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                placeholder="Nova anotação..."
-                className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none text-sm"
-                rows={3}
-              />
-              <button
-                onClick={handleAddNote}
-                disabled={!newNote.trim()}
-                className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Save size={16} />
-                Salvar Anotação
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

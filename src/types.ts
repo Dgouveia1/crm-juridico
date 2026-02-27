@@ -1,3 +1,13 @@
+export type ProcessStage =
+  | 'Petição Inicial'
+  | 'Instrução'
+  | 'Sentença'
+  | 'Recurso'
+  | 'Execução'
+  | 'Arquivado';
+
+export type AlertType = 'prazo' | 'intimacao' | 'publicacao' | 'decisao' | 'geral';
+
 export interface Movement {
   date: string;
   description: string;
@@ -14,6 +24,8 @@ export interface Process {
   Valor_Acao: number;
   Partes_Envolvidas: string[];
   Movimentacoes: Movement[];
+  stage: ProcessStage;
+  successProbability: number;
 }
 
 export interface Note {
@@ -31,7 +43,11 @@ export interface Task {
   title: string;
   dueDate: string;
   completed: boolean;
+  priority?: 'alta' | 'media' | 'baixa';
 }
+
+export type PartyTipo = 'PF' | 'PJ';
+export type PartyStatus = 'ativo' | 'inativo' | 'prospecto';
 
 export interface Party {
   id: string;
@@ -39,6 +55,11 @@ export interface Party {
   phone?: string;
   email?: string;
   address?: string;
+  cpfCnpj?: string;
+  tipo?: PartyTipo;
+  status?: PartyStatus;
+  processCount?: number;
+  notes?: string;
 }
 
 export interface Alert {
@@ -47,4 +68,6 @@ export interface Alert {
   date: string;
   description: string;
   daysUntil: number;
+  type: AlertType;
+  dismissed?: boolean;
 }

@@ -1,203 +1,293 @@
 import React, { useMemo } from 'react';
 import { useAppContext } from '../store/AppContext';
-import { 
+import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
+  Cell
 } from 'recharts';
-import { FileText, DollarSign, Building2, Gavel, Clock } from 'lucide-react';
+import {
+  FileText, DollarSign, Building2, Bell, TrendingUp,
+  Clock, AlertTriangle, ChevronRight, Zap
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ProcessStage } from '../types';
 
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+const STAGE_COLORS: Record<ProcessStage, string> = {
+  'Petição Inicial': '#3b82f6',
+  'Instrução': '#8b5cf6',
+  'Sentença': '#f59e0b',
+  'Recurso': '#ef4444',
+  'Execução': '#10b981',
+  'Arquivado': '#6b7280',
+};
+
+const STAGE_ORDER: ProcessStage[] = ['Petição Inicial', 'Instrução', 'Sentença', 'Recurso', 'Execução', 'Arquivado'];
+
+const fmt = (v: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 1 }).format(v);
+
+const fmtFull = (v: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
 const Dashboard = () => {
-  const { processes, loading } = useAppContext();
+  const { processes, alerts, loading } = useAppContext();
 
   const metrics = useMemo(() => {
     if (!processes.length) return null;
 
-    const totalProcesses = processes.length;
-    const totalValue = processes.reduce((sum, p) => sum + p.Valor_Acao, 0);
-    
-    // Processes by Class
-    const classCount: Record<string, number> = {};
+    const totalValue = processes.reduce((s, p) => s + p.Valor_Acao, 0);
+    const honorariosEst = totalValue * 0.15;
+
+    // Stage funnel
+    const stageMap: Record<string, number> = {};
     processes.forEach(p => {
-      classCount[p.Classe] = (classCount[p.Classe] || 0) + 1;
+      stageMap[p.stage] = (stageMap[p.stage] || 0) + 1;
     });
-    const classData = Object.entries(classCount)
+    const stageFunnel = STAGE_ORDER.map(s => ({
+      name: s,
+      count: stageMap[s] || 0,
+      color: STAGE_COLORS[s],
+    })).filter(s => s.count > 0);
+
+    // Foro ranking by total value
+    const foroValues: Record<string, number> = {};
+    processes.forEach(p => {
+      const shortForo = p.Foro.replace('Foro de ', '').replace('Foro ', '').slice(0, 20);
+      foroValues[shortForo] = (foroValues[shortForo] || 0) + p.Valor_Acao;
+    });
+    const foroRanking = Object.entries(foroValues)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
+      .slice(0, 6);
 
-    // Processes by Foro
-    const foroCount: Record<string, number> = {};
+    // Success probability distribution
+    const probBuckets = [
+      { label: '< 30%', min: 0, max: 30, count: 0, color: '#ef4444' },
+      { label: '30–50%', min: 30, max: 50, count: 0, color: '#f59e0b' },
+      { label: '50–70%', min: 50, max: 70, count: 0, color: '#3b82f6' },
+      { label: '70–85%', min: 70, max: 85, count: 0, color: '#10b981' },
+      { label: '> 85%', min: 85, max: 100, count: 0, color: '#059669' },
+    ];
     processes.forEach(p => {
-      foroCount[p.Foro] = (foroCount[p.Foro] || 0) + 1;
+      const bucket = probBuckets.find(b => p.successProbability >= b.min && p.successProbability < b.max);
+      if (bucket) bucket.count++;
     });
-    const foroData = Object.entries(foroCount)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
 
-    // Recent movements
-    const allMovements = processes.flatMap(p => 
-      p.Movimentacoes.map(m => ({
-        ...m,
-        processId: p.Numero_Processo,
-        processClass: p.Classe
+    // Recent critical movements (last 8)
+    const allMovements = processes.flatMap(p =>
+      p.Movimentacoes.slice(0, 1).map(m => ({
+        ...m, processId: p.Numero_Processo, classe: p.Classe, stage: p.stage
       }))
-    ).filter(m => m.date);
+    ).filter(m => m.date).sort((a, b) => {
+      const [d1, mo1, y1] = a.date.split('/');
+      const [d2, mo2, y2] = b.date.split('/');
+      return new Date(`${y2}-${mo2}-${d2}`).getTime() - new Date(`${y1}-${mo1}-${d1}`).getTime();
+    }).slice(0, 8);
 
-    // Sort by date descending (assuming dd/mm/yyyy format)
-    const recentMovements = allMovements.sort((a, b) => {
-      const [d1, m1, y1] = a.date.split('/');
-      const [d2, m2, y2] = b.date.split('/');
-      return new Date(`${y2}-${m2}-${d2}`).getTime() - new Date(`${y1}-${m1}-${d1}`).getTime();
-    }).slice(0, 10);
+    // Week alerts
+    const weekAlerts = alerts.filter(a => a.daysUntil <= 7 && a.daysUntil >= -1).length;
 
     return {
-      totalProcesses,
+      totalProcesses: processes.length,
       totalValue,
-      classData,
-      foroData,
-      recentMovements
+      honorariosEst,
+      stageFunnel,
+      foroRanking,
+      probBuckets,
+      recentMovements: allMovements,
+      weekAlerts,
     };
-  }, [processes]);
+  }, [processes, alerts]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-      </div>
-    );
-  }
-
-  if (!metrics) return null;
+  if (loading || !metrics) return null;
 
   return (
-    <div className="space-y-6">
-      {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
-            <FileText size={24} />
-          </div>
+    <div className="dashboard">
+      {/* ── Urgency Banner ─────────────────────────────────── */}
+      {metrics.weekAlerts > 0 && (
+        <div className="dash-urgency-banner">
+          <Zap size={18} className="dash-urgency-icon" />
+          <span>
+            <strong>{metrics.weekAlerts} prazo{metrics.weekAlerts > 1 ? 's' : ''}</strong> vencem nos próximos 7 dias!
+          </span>
+          <Link to="/alertas" className="dash-urgency-link">
+            Ver alertas <ChevronRight size={14} />
+          </Link>
+        </div>
+      )}
+
+      {/* ── Metric Cards ───────────────────────────────────── */}
+      <div className="dash-cards">
+        <div className="dash-card dash-card--blue">
+          <div className="dash-card-icon"><FileText size={22} /></div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Total de Processos</p>
-            <h3 className="text-2xl font-bold text-slate-900">{metrics.totalProcesses}</h3>
+            <p className="dash-card-label">Total de Processos</p>
+            <h3 className="dash-card-value">{metrics.totalProcesses}</h3>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shrink-0">
-            <DollarSign size={24} />
-          </div>
+        <div className="dash-card dash-card--green">
+          <div className="dash-card-icon"><DollarSign size={22} /></div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Valor Total das Ações</p>
-            <h3 className="text-2xl font-bold text-slate-900">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(metrics.totalValue)}
-            </h3>
+            <p className="dash-card-label">Valor da Causa</p>
+            <h3 className="dash-card-value">{fmt(metrics.totalValue)}</h3>
+            <p className="dash-card-sub-label">{fmtFull(metrics.totalValue)}</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
-            <Gavel size={24} />
-          </div>
+        <div className="dash-card dash-card--purple">
+          <div className="dash-card-icon"><TrendingUp size={22} /></div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Classes Distintas</p>
-            <h3 className="text-2xl font-bold text-slate-900">{metrics.classData.length}</h3>
+            <p className="dash-card-label">Honorários Est. (15%)</p>
+            <h3 className="dash-card-value">{fmt(metrics.honorariosEst)}</h3>
+            <p className="dash-card-sub-label">Estimativa sobre valor total</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center shrink-0">
-            <Building2 size={24} />
-          </div>
+        <div className="dash-card dash-card--amber">
+          <div className="dash-card-icon"><Bell size={22} /></div>
           <div>
-            <p className="text-sm font-medium text-slate-500">Foros Ativos</p>
-            <h3 className="text-2xl font-bold text-slate-900">{metrics.foroData.length}</h3>
+            <p className="dash-card-label">Alertas Ativos</p>
+            <h3 className="dash-card-value">{alerts.length}</h3>
+            <p className="dash-card-sub-label">{metrics.weekAlerts} urgentes esta semana</p>
           </div>
         </div>
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800 mb-6">Processos por Classe</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={metrics.classData} layout="vertical" margin={{ left: 100 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                <XAxis type="number" />
-                <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+      {/* ── Process Funnel ─────────────────────────────────── */}
+      <div className="dash-section-title">
+        <AlertTriangle size={16} />
+        Funil Processual por Etapa
+      </div>
+      <div className="dash-funnel">
+        {STAGE_ORDER.map(stage => {
+          const item = metrics.stageFunnel.find(s => s.name === stage);
+          const count = item?.count || 0;
+          const max = Math.max(...metrics.stageFunnel.map(s => s.count), 1);
+          const pct = Math.round((count / metrics.totalProcesses) * 100);
+          return (
+            <div key={stage} className="dash-funnel-item">
+              <div className="dash-funnel-label">
+                <span className="dash-funnel-stage">{stage}</span>
+                <span className="dash-funnel-count">{count}</span>
+              </div>
+              <div className="dash-funnel-bar-bg">
+                <div
+                  className="dash-funnel-bar"
+                  style={{ width: `${(count / max) * 100}%`, background: STAGE_COLORS[stage] }}
                 />
-                <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} />
+              </div>
+              <span className="dash-funnel-pct">{pct}%</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Charts row ─────────────────────────────────────── */}
+      <div className="dash-charts-row">
+        {/* Foro ranking by value */}
+        <div className="dash-chart-card">
+          <h3 className="dash-chart-title">
+            <Building2 size={16} />
+            Ranking de Foros por Valor
+          </h3>
+          <div className="dash-chart-area">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={metrics.foroRanking} layout="vertical" margin={{ left: 10, right: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(148,163,184,.15)" />
+                <XAxis
+                  type="number"
+                  tickFormatter={v => fmt(v)}
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  width={90}
+                  tick={{ fontSize: 11, fill: '#cbd5e1' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  formatter={(v: number) => [fmtFull(v), 'Valor Total']}
+                  contentStyle={{ borderRadius: '12px', border: 'none', background: '#1e293b', color: '#f1f5f9', fontSize: 12 }}
+                />
+                <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                  {metrics.foroRanking.map((_, i) => (
+                    <Cell key={i} fill={i === 0 ? '#10b981' : i === 1 ? '#3b82f6' : '#6366f1'} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800 mb-6">Distribuição por Foro</h3>
-          <div className="h-80">
+        {/* Probabilidade de Êxito */}
+        <div className="dash-chart-card">
+          <h3 className="dash-chart-title">
+            <TrendingUp size={16} />
+            Probabilidade de Êxito
+          </h3>
+          <div className="dash-chart-area">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={metrics.foroData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={110}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {metrics.foroData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              <BarChart data={metrics.probBuckets.filter(b => b.count > 0)} margin={{ left: 0, right: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148,163,184,.15)" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
                 />
-                <Legend />
-              </PieChart>
+                <YAxis
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  formatter={(v: number) => [v + ' processos', 'Quantidade']}
+                  contentStyle={{ borderRadius: '12px', border: 'none', background: '#1e293b', color: '#f1f5f9', fontSize: 12 }}
+                />
+                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                  {metrics.probBuckets.filter(b => b.count > 0).map((b, i) => (
+                    <Cell key={i} fill={b.color} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
 
-      {/* Recent Movements */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-            <Clock size={20} className="text-emerald-600" />
-            Últimas Movimentações
+      {/* ── Recent Movements ───────────────────────────────── */}
+      <div className="dash-recent">
+        <div className="dash-recent-header">
+          <h3 className="dash-chart-title">
+            <Clock size={16} />
+            Últimas Movimentações Críticas
           </h3>
+          <Link to="/processos" className="dash-recent-link">
+            Ver todos <ChevronRight size={14} />
+          </Link>
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="dash-recent-list">
           {metrics.recentMovements.map((mov, idx) => (
-            <div key={idx} className="p-6 hover:bg-slate-50 transition-colors">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="text-sm font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-md">
-                      {mov.date}
-                    </span>
-                    <Link 
-                      to={`/processos/${encodeURIComponent(mov.processId)}`}
-                      className="text-sm font-medium text-blue-600 hover:underline"
-                    >
-                      {mov.processId}
-                    </Link>
-                    <span className="text-xs text-slate-500 truncate max-w-[200px]">
-                      {mov.processClass}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-700 mt-2 line-clamp-2 leading-relaxed">
-                    {mov.description}
-                  </p>
+            <div key={idx} className="dash-recent-item">
+              <div className="dash-recent-stage-dot" style={{ background: STAGE_COLORS[mov.stage as ProcessStage] || '#6b7280' }} />
+              <div className="dash-recent-body">
+                <div className="dash-recent-meta">
+                  <Link
+                    to={`/processos/${encodeURIComponent(mov.processId)}`}
+                    className="dash-recent-proc"
+                  >
+                    {mov.processId}
+                  </Link>
+                  <span className="dash-recent-date">{mov.date}</span>
+                  <span className="dash-recent-badge" style={{ background: STAGE_COLORS[mov.stage as ProcessStage] + '33', color: STAGE_COLORS[mov.stage as ProcessStage] }}>
+                    {mov.stage}
+                  </span>
                 </div>
+                <p className="dash-recent-desc">{mov.description.slice(0, 120)}{mov.description.length > 120 ? '...' : ''}</p>
               </div>
             </div>
           ))}

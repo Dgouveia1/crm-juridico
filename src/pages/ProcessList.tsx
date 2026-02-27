@@ -1,66 +1,68 @@
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../store/AppContext';
-import { Search, Filter, Download, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react';
+import { Search, Download, ChevronLeft, ChevronRight, ArrowUpDown, LayoutGrid, List, Filter } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
+import { ProcessStage } from '../types';
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 12;
+
+const STAGE_COLORS: Record<ProcessStage, string> = {
+  'Petição Inicial': '#3b82f6',
+  'Instrução': '#8b5cf6',
+  'Sentença': '#f59e0b',
+  'Recurso': '#ef4444',
+  'Execução': '#10b981',
+  'Arquivado': '#6b7280',
+};
+
+const STAGE_ORDER: ProcessStage[] = ['Petição Inicial', 'Instrução', 'Sentença', 'Recurso', 'Execução', 'Arquivado'];
+
+type ViewMode = 'table' | 'kanban';
 
 const ProcessList = () => {
   const { processes, loading } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
-
-  // Filters
   const [filterClass, setFilterClass] = useState('');
   const [filterForo, setFilterForo] = useState('');
+  const [filterStage, setFilterStage] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   const uniqueClasses = useMemo(() => Array.from(new Set(processes.map(p => p.Classe))).sort(), [processes]);
   const uniqueForos = useMemo(() => Array.from(new Set(processes.map(p => p.Foro))).sort(), [processes]);
 
   const filteredAndSortedProcesses = useMemo(() => {
     let result = [...processes];
-
-    // Search
     if (searchTerm) {
-      const lowerSearch = searchTerm.toLowerCase();
-      result = result.filter(p => 
-        p.Numero_Processo.toLowerCase().includes(lowerSearch) ||
-        p.Assunto.toLowerCase().includes(lowerSearch) ||
-        p.Partes_Envolvidas.some(party => party.toLowerCase().includes(lowerSearch))
+      const lower = searchTerm.toLowerCase();
+      result = result.filter(p =>
+        p.Numero_Processo.toLowerCase().includes(lower) ||
+        p.Assunto.toLowerCase().includes(lower) ||
+        p.Classe.toLowerCase().includes(lower) ||
+        p.Foro.toLowerCase().includes(lower) ||
+        p.Partes_Envolvidas.some(party => party.toLowerCase().includes(lower))
       );
     }
+    if (filterClass) result = result.filter(p => p.Classe === filterClass);
+    if (filterForo) result = result.filter(p => p.Foro === filterForo);
+    if (filterStage) result = result.filter(p => p.stage === filterStage);
 
-    // Filters
-    if (filterClass) {
-      result = result.filter(p => p.Classe === filterClass);
-    }
-    if (filterForo) {
-      result = result.filter(p => p.Foro === filterForo);
-    }
-
-    // Sort
     if (sortConfig) {
       result.sort((a, b) => {
-        let aValue: any = a[sortConfig.key as keyof typeof a];
-        let bValue: any = b[sortConfig.key as keyof typeof b];
-
-        if (sortConfig.key === 'Valor_Acao') {
-          aValue = Number(aValue);
-          bValue = Number(bValue);
-        }
-
-        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        let aVal: any = a[sortConfig.key as keyof typeof a];
+        let bVal: any = b[sortConfig.key as keyof typeof b];
+        if (sortConfig.key === 'Valor_Acao') { aVal = Number(aVal); bVal = Number(bVal); }
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       });
     }
-
     return result;
-  }, [processes, searchTerm, filterClass, filterForo, sortConfig]);
+  }, [processes, searchTerm, filterClass, filterForo, filterStage, sortConfig]);
 
   const totalPages = Math.ceil(filteredAndSortedProcesses.length / ITEMS_PER_PAGE);
   const paginatedProcesses = filteredAndSortedProcesses.slice(
@@ -69,21 +71,17 @@ const ProcessList = () => {
   );
 
   const handleSort = (key: string) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
+    setSortConfig(prev =>
+      prev && prev.key === key && prev.direction === 'asc'
+        ? { key, direction: 'desc' }
+        : { key, direction: 'asc' }
+    );
   };
 
   const exportCSV = () => {
     const data = filteredAndSortedProcesses.map(p => ({
-      'Número': p.Numero_Processo,
-      'Classe': p.Classe,
-      'Assunto': p.Assunto,
-      'Foro': p.Foro,
-      'Vara': p.Vara,
-      'Valor': p.Valor_Acao,
+      'Número': p.Numero_Processo, 'Classe': p.Classe, 'Assunto': p.Assunto,
+      'Etapa': p.stage, 'Foro': p.Foro, 'Vara': p.Vara, 'Valor': p.Valor_Acao,
       'Partes': p.Partes_Envolvidas.join('; ')
     }));
     const csv = Papa.unparse(data);
@@ -97,11 +95,9 @@ const ProcessList = () => {
   const exportPDF = () => {
     const doc = new jsPDF('landscape');
     autoTable(doc, {
-      head: [['Número', 'Classe', 'Foro', 'Valor', 'Partes']],
+      head: [['Número', 'Classe', 'Etapa', 'Foro', 'Valor', 'Partes']],
       body: filteredAndSortedProcesses.map(p => [
-        p.Numero_Processo,
-        p.Classe,
-        p.Foro,
+        p.Numero_Processo, p.Classe, p.stage, p.Foro,
         new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p.Valor_Acao),
         p.Partes_Envolvidas.join(', ')
       ]),
@@ -111,120 +107,134 @@ const ProcessList = () => {
     doc.save('processos.pdf');
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-      </div>
-    );
-  }
+  if (loading) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-2xl font-bold text-slate-900">Processos</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={exportCSV}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
-          >
-            <Download size={16} />
-            CSV
+    <div className="plist">
+      {/* Header */}
+      <div className="plist-header">
+        <div>
+          <h1 className="plist-title">Processos</h1>
+          <p className="plist-subtitle">{filteredAndSortedProcesses.length} de {processes.length} processos</p>
+        </div>
+        <div className="plist-actions">
+          <button onClick={exportCSV} className="plist-btn-export">
+            <Download size={15} /> CSV
           </button>
-          <button
-            onClick={exportPDF}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
-          >
-            <Download size={16} />
-            PDF
+          <button onClick={exportPDF} className="plist-btn-export plist-btn-export--pdf">
+            <Download size={15} /> PDF
           </button>
+          {/* View toggle */}
+          <div className="plist-view-toggle">
+            <button
+              className={`plist-view-btn ${viewMode === 'table' ? 'plist-view-btn--active' : ''}`}
+              onClick={() => setViewMode('table')}
+              title="Tabela"
+            >
+              <List size={16} />
+            </button>
+            <button
+              className={`plist-view-btn ${viewMode === 'kanban' ? 'plist-view-btn--active' : ''}`}
+              onClick={() => setViewMode('kanban')}
+              title="Kanban"
+            >
+              <LayoutGrid size={16} />
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col lg:flex-row gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+      {/* Filters */}
+      <div className="plist-filters">
+        <div className="plist-search-wrap">
+          <Search size={16} className="plist-search-icon" />
           <input
             type="text"
-            placeholder="Buscar por número, assunto ou parte..."
+            placeholder="Buscar por número, parte, assunto, foro..."
             value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+            onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            className="plist-search"
           />
         </div>
-        <div className="flex gap-4">
-          <select
-            value={filterClass}
-            onChange={(e) => { setFilterClass(e.target.value); setCurrentPage(1); }}
-            className="px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-slate-700"
-          >
+        <div className="plist-filter-row">
+          <Filter size={14} className="plist-filter-icon" />
+          <select value={filterStage} onChange={e => { setFilterStage(e.target.value); setCurrentPage(1); }} className="plist-select">
+            <option value="">Todas as Etapas</option>
+            {STAGE_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={filterClass} onChange={e => { setFilterClass(e.target.value); setCurrentPage(1); }} className="plist-select">
             <option value="">Todas as Classes</option>
             {uniqueClasses.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <select
-            value={filterForo}
-            onChange={(e) => { setFilterForo(e.target.value); setCurrentPage(1); }}
-            className="px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-slate-700"
-          >
+          <select value={filterForo} onChange={e => { setFilterForo(e.target.value); setCurrentPage(1); }} className="plist-select">
             <option value="">Todos os Foros</option>
             {uniqueForos.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+      {/* ── TABLE VIEW ─────────────────────────────────────── */}
+      {viewMode === 'table' && (
+        <div className="plist-table-wrap">
+          <table className="plist-table">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
-                <th className="p-4 font-semibold cursor-pointer hover:bg-slate-100" onClick={() => handleSort('Numero_Processo')}>
-                  <div className="flex items-center gap-1">Número <ArrowUpDown size={14} /></div>
+              <tr>
+                <th onClick={() => handleSort('Numero_Processo')}>
+                  <div className="plist-th">Número <ArrowUpDown size={13} /></div>
                 </th>
-                <th className="p-4 font-semibold cursor-pointer hover:bg-slate-100" onClick={() => handleSort('Classe')}>
-                  <div className="flex items-center gap-1">Classe / Assunto <ArrowUpDown size={14} /></div>
+                <th onClick={() => handleSort('stage')}>
+                  <div className="plist-th">Etapa <ArrowUpDown size={13} /></div>
                 </th>
-                <th className="p-4 font-semibold cursor-pointer hover:bg-slate-100" onClick={() => handleSort('Foro')}>
-                  <div className="flex items-center gap-1">Foro / Vara <ArrowUpDown size={14} /></div>
+                <th onClick={() => handleSort('Classe')}>
+                  <div className="plist-th">Classe / Assunto <ArrowUpDown size={13} /></div>
                 </th>
-                <th className="p-4 font-semibold cursor-pointer hover:bg-slate-100" onClick={() => handleSort('Valor_Acao')}>
-                  <div className="flex items-center gap-1">Valor <ArrowUpDown size={14} /></div>
+                <th onClick={() => handleSort('Foro')}>
+                  <div className="plist-th">Foro / Vara <ArrowUpDown size={13} /></div>
                 </th>
-                <th className="p-4 font-semibold">Partes</th>
+                <th onClick={() => handleSort('Valor_Acao')}>
+                  <div className="plist-th">Valor <ArrowUpDown size={13} /></div>
+                </th>
+                <th><div className="plist-th">Partes</div></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {paginatedProcesses.map((process, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 transition-colors group">
-                  <td className="p-4">
-                    <Link 
-                      to={`/processos/${encodeURIComponent(process.Numero_Processo)}`}
-                      className="text-emerald-600 font-medium hover:underline"
-                    >
-                      {process.Numero_Processo}
+            <tbody>
+              {paginatedProcesses.map((proc, idx) => (
+                <tr key={idx} className="plist-row">
+                  <td>
+                    <Link to={`/processos/${encodeURIComponent(proc.Numero_Processo)}`} className="plist-proc-link">
+                      {proc.Numero_Processo}
                     </Link>
                   </td>
-                  <td className="p-4">
-                    <div className="font-medium text-slate-900">{process.Classe}</div>
-                    <div className="text-sm text-slate-500 truncate max-w-xs" title={process.Assunto}>{process.Assunto}</div>
+                  <td>
+                    <span
+                      className="plist-stage-badge"
+                      style={{
+                        background: STAGE_COLORS[proc.stage] + '22',
+                        color: STAGE_COLORS[proc.stage],
+                        borderColor: STAGE_COLORS[proc.stage] + '44'
+                      }}
+                    >
+                      {proc.stage}
+                    </span>
                   </td>
-                  <td className="p-4">
-                    <div className="text-slate-900">{process.Foro}</div>
-                    <div className="text-sm text-slate-500">{process.Vara}</div>
+                  <td>
+                    <div className="plist-cell-main">{proc.Classe}</div>
+                    <div className="plist-cell-sub">{proc.Assunto}</div>
                   </td>
-                  <td className="p-4 font-medium text-slate-900">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(process.Valor_Acao)}
+                  <td>
+                    <div className="plist-cell-main">{proc.Foro}</div>
+                    <div className="plist-cell-sub">{proc.Vara}</div>
                   </td>
-                  <td className="p-4">
-                    <div className="flex flex-wrap gap-1">
-                      {process.Partes_Envolvidas.slice(0, 2).map((party, i) => (
-                        <span key={i} className="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-xs font-medium text-slate-700">
-                          {party}
-                        </span>
+                  <td className="plist-val">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(proc.Valor_Acao)}
+                  </td>
+                  <td>
+                    <div className="plist-parties">
+                      {proc.Partes_Envolvidas.slice(0, 1).map((p, i) => (
+                        <span key={i} className="plist-party-tag">{p}</span>
                       ))}
-                      {process.Partes_Envolvidas.length > 2 && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-xs font-medium text-slate-500">
-                          +{process.Partes_Envolvidas.length - 2}
-                        </span>
+                      {proc.Partes_Envolvidas.length > 1 && (
+                        <span className="plist-party-more">+{proc.Partes_Envolvidas.length - 1}</span>
                       )}
                     </div>
                   </td>
@@ -232,65 +242,79 @@ const ProcessList = () => {
               ))}
               {paginatedProcesses.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-500">
-                    Nenhum processo encontrado com os filtros atuais.
-                  </td>
+                  <td colSpan={6} className="plist-empty">Nenhum processo encontrado.</td>
                 </tr>
               )}
             </tbody>
           </table>
-        </div>
-        
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50">
-            <span className="text-sm text-slate-500">
-              Mostrando <span className="font-medium text-slate-900">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> a <span className="font-medium text-slate-900">{Math.min(currentPage * ITEMS_PER_PAGE, filteredAndSortedProcesses.length)}</span> de <span className="font-medium text-slate-900">{filteredAndSortedProcesses.length}</span> processos
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <div className="flex items-center gap-1">
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="plist-pagination">
+              <span className="plist-pagination-info">
+                {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredAndSortedProcesses.length)} de {filteredAndSortedProcesses.length}
+              </span>
+              <div className="plist-pagination-btns">
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="plist-pg-btn">
+                  <ChevronLeft size={15} />
+                </button>
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum = currentPage;
-                  if (currentPage <= 3) pageNum = i + 1;
-                  else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                  else pageNum = currentPage - 2 + i;
-                  
-                  if (pageNum > 0 && pageNum <= totalPages) {
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
-                          currentPage === pageNum
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  }
+                  let pn = currentPage <= 3 ? i + 1 : currentPage >= totalPages - 2 ? totalPages - 4 + i : currentPage - 2 + i;
+                  if (pn > 0 && pn <= totalPages) return (
+                    <button key={pn} onClick={() => setCurrentPage(pn)} className={`plist-pg-btn ${currentPage === pn ? 'plist-pg-btn--active' : ''}`}>{pn}</button>
+                  );
                   return null;
                 })}
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="plist-pg-btn">
+                  <ChevronRight size={15} />
+                </button>
               </div>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight size={16} />
-              </button>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+
+      {/* ── KANBAN VIEW ────────────────────────────────────── */}
+      {viewMode === 'kanban' && (
+        <div className="plist-kanban">
+          {STAGE_ORDER.map(stage => {
+            const stageProcs = filteredAndSortedProcesses.filter(p => p.stage === stage);
+            if (stageProcs.length === 0) return null;
+            const totalVal = stageProcs.reduce((s, p) => s + p.Valor_Acao, 0);
+            return (
+              <div key={stage} className="kanban-col">
+                <div className="kanban-col-header" style={{ borderTopColor: STAGE_COLORS[stage] }}>
+                  <div className="kanban-col-title">
+                    <span className="kanban-col-dot" style={{ background: STAGE_COLORS[stage] }} />
+                    {stage}
+                  </div>
+                  <span className="kanban-col-count">{stageProcs.length}</span>
+                </div>
+                <div className="kanban-col-sub">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(totalVal)}
+                </div>
+                <div className="kanban-cards">
+                  {stageProcs.slice(0, 8).map((proc, i) => (
+                    <Link key={i} to={`/processos/${encodeURIComponent(proc.Numero_Processo)}`} className="kanban-card">
+                      <div className="kanban-card-num">{proc.Numero_Processo}</div>
+                      <div className="kanban-card-classe">{proc.Classe}</div>
+                      {proc.Partes_Envolvidas[0] && (
+                        <div className="kanban-card-party">{proc.Partes_Envolvidas[0]}</div>
+                      )}
+                      <div className="kanban-card-val">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(proc.Valor_Acao)}
+                      </div>
+                    </Link>
+                  ))}
+                  {stageProcs.length > 8 && (
+                    <div className="kanban-more">+{stageProcs.length - 8} processos</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
